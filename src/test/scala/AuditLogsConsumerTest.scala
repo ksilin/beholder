@@ -27,7 +27,7 @@ class AuditLogsConsumerTest extends TestBase {
     val convertAndPrint: ConsumerRecord[String, String] => Unit = { rec =>
       val value                                      = rec.value()
       val parsed: Either[circe.Error, AuditLogEntry] = decode[AuditLogEntry](value)
-      parsed.fold(auditLogEntryErrorLogger, auditLogEntryPrinter)
+      parsed.fold(auditLogEntryErrorLogger, auditLogEntryStructuredLogger)
     }
     TopicUtil.fetchAndProcessRecords(
       consumer,
@@ -72,12 +72,15 @@ class AuditLogsConsumerTest extends TestBase {
     )
 
   val auditLogEntryErrorLogger: circe.Error => Unit = (e: circe.Error) =>
-    alert(s"parsing failed: ${e}")
+    warn(s"parsing failed: ${e}")
   val auditLogEntryLogger: AuditLogEntry => Unit = (logEvent: AuditLogEntry) =>
-    alert(
+    info(
       s"action: ${logEvent.data.methodName}, serviceName: ${logEvent.data.serviceName}, subject: ${logEvent.subject},  principal: ${logEvent.data.authenticationInfo.principal}, id/key: ${logEvent.data.authenticationInfo.metadata
         .map(_.identifier)
         .getOrElse("NONE")} ts: ${logEvent.time}"
     )
+
+  val auditLogEntryStructuredLogger: AuditLogEntry => Unit = (logEvent: AuditLogEntry) =>
+    info(logEvent.asJson.deepDropNullValues.spaces2)
 
 }

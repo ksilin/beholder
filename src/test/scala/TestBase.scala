@@ -6,10 +6,12 @@ import org.apache.kafka.common.config.SaslConfigs
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
+import wvlet.log.LogSupport
 
 import java.util.{Properties, UUID}
 
-class TestBase     extends AnyFreeSpec
+class TestBase extends AnyFreeSpec
+  with LogSupport
   with Matchers
   with BeforeAndAfterAll
   with FutureConverter {

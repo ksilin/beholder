@@ -1,4 +1,6 @@
 cloud {
+  bootstrapPrefix=pkc-xxxx.us-west-2.aws
+  bootstrapPrefix=${?CCLOUD_BOOTSTRAP_PREFIX}
   apiKey=123
   apiKey = ${?CCLOUD_API_KEY}
   secret=44576

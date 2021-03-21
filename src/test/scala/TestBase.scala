@@ -16,13 +16,14 @@ class TestBase     extends AnyFreeSpec
 
   val conf: Config = ConfigFactory.load()
   val ctx = "cloud"
+  private val bootstrapPrefix: String = conf.getString(s"${ctx}.bootstrapPrefix")
   private val apiKey: String = conf.getString(s"${ctx}.apiKey")
   private val secret: String = conf.getString(s"${ctx}.secret")
 
   val commonConsumerProps = new Properties()
   commonConsumerProps.put(
     CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
-    "pkc-4ywp7.us-west-2.aws.confluent.cloud:9092"
+    s"${bootstrapPrefix}.confluent.cloud:9092"
   )
   commonConsumerProps.put(
     ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,

@@ -1,6 +1,10 @@
-# beholder #
+# beholder # 
 
-Welcome to beholder!
+This is an example fo programmatically reading CCloud audit logs, parsing them and extracting relevant information.
+
+see `AuditLogsConsumerTest`. 
+
+Provide your CCloud credentials by modifying the `application.conf.example` file and renaming it to `application.conf` 
 
 ## Contribution policy ##
 

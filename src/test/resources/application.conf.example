@@ -1,0 +1,7 @@
+cloud {
+  apiKey=123
+  apiKey = ${?CCLOUD_API_KEY}
+  secret=44576
+  apiKey = ${?CCLOUD_SECRET}
+}
+

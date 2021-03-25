@@ -115,6 +115,7 @@ object TopicUtil extends LogSupport with FutureConverter {
     val duration: time.Duration                 = java.time.Duration.ofMillis(100)
     var found                                   = false
     var records: Iterable[ConsumerRecord[K, V]] = Nil
+    var allRecords: Iterable[ConsumerRecord[K, V]] = Nil
     var attempts                                = 0
     while (!found && attempts < maxAttempts) {
       val consumerRecords: ConsumerRecords[K, V] = consumer.poll(duration)
@@ -124,6 +125,7 @@ object TopicUtil extends LogSupport with FutureConverter {
       if (!consumerRecords.isEmpty) {
         info(s"fetched ${consumerRecords.count()} records on attempt $attempts")
         records = consumerRecords.asScala
+        allRecords ++= records
         records foreach { r => process(r) }
       }
       Thread.sleep(pause)
@@ -131,7 +133,7 @@ object TopicUtil extends LogSupport with FutureConverter {
     if (attempts >= maxAttempts) {
       info(s"no data received in $attempts attempts")
     }
-    records
+    allRecords
   }
 
 }

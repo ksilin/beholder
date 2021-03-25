@@ -4,16 +4,17 @@ import io.circe.syntax._
 import io.circe.generic.auto._
 import io.circe.parser._
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
+import org.apache.kafka.common.header.Header
 
 import java.util.Properties
 import scala.jdk.CollectionConverters._
 
 class AuditLogsConsumerTest extends TestBase {
 
-  val auditLogTopic = "confluent-audit-log-events"
+  val auditLogTopic              = "confluent-audit-log-events"
+  val cloudEventsJsonContentType = "application/cloudevents+json"
 
   "reads audit logs as string" in {
-
     val consumer = new KafkaConsumer[String, String](commonConsumerProps)
     consumer.subscribe(List(auditLogTopic).asJava)
     TopicUtil.fetchAndProcessRecords(consumer)
@@ -25,9 +26,11 @@ class AuditLogsConsumerTest extends TestBase {
     consumer.subscribe(List(auditLogTopic).asJava)
 
     val convertAndPrint: ConsumerRecord[String, String] => Unit = { rec =>
-      val value                                      = rec.value()
-      val parsed: Either[circe.Error, AuditLogEntry] = decode[AuditLogEntry](value)
-      parsed.fold(auditLogEntryErrorLogger, auditLogEntryStructuredLogger)
+      val contentTypeHeader: Header = rec.headers().lastHeader("content-type")
+      new String(contentTypeHeader.value()) mustBe cloudEventsJsonContentType
+
+      val parsedEvent: Either[circe.Error, AuditLogEntry] = decode[AuditLogEntry](rec.value())
+      parsedEvent.fold(auditLogEntryErrorLogger, auditLogEntryStructuredLogger)
     }
     TopicUtil.fetchAndProcessRecords(
       consumer,
@@ -35,6 +38,50 @@ class AuditLogsConsumerTest extends TestBase {
       abortOnFirstRecord = false,
       maxAttempts = Int.MaxValue
     )
+  }
+
+  "gambiarra analytics" in {
+    val props = commonConsumerProps.clone().asInstanceOf[Properties]
+    props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+    val consumer = new KafkaConsumer[String, String](props)
+    consumer.subscribe(List(auditLogTopic).asJava)
+
+    val records: Iterable[ConsumerRecord[String, String]] = TopicUtil.fetchAndProcessRecords(
+      consumer,
+      _ => (),
+      abortOnFirstRecord = false,
+      maxAttempts = 99
+    )
+
+    val entries: List[AuditLogEntry] =
+      records.map(r => decode[AuditLogEntry](r.value()).right.get).toList
+
+    val simpleEntries: List[(String, String, String, String)] = entries.map { e =>
+      val apiKeyOrUser = e.data.authenticationInfo.metadata
+        .map(_.identifier)
+        .getOrElse(e.data.authenticationInfo.principal)
+      val resultOrError = e.data.result.map(_.status).getOrElse("NO RESULT")
+
+      (e.data.methodName, apiKeyOrUser, e.time, resultOrError)
+    }
+    val groupedByMethod: Map[String, List[(String, String, String, String)]] =
+      simpleEntries.groupBy(_._1)
+
+    println("---")
+    println("count by method:")
+    println("---")
+    groupedByMethod.view.mapValues(_.size).toList.sortBy(_._2).reverse foreach println
+
+    val authNByUser: Map[String, List[(String, String, String, String)]] =
+      groupedByMethod("kafka.Authentication").groupBy(_._2)
+
+    val authNCountByUser: List[(String, (Int, String, String))] =
+      authNByUser.view.mapValues(v => (v.size, v.map(_._3).min, v.map(_._3).max)).toList
+
+    println("---")
+    println("count by api key / user:")
+    println("---")
+    authNCountByUser.sortBy(_._2._1).reverse foreach (e => println(e.asJson.spaces2))
   }
 
   "reads audit logs as JSON using KafkaJsonDeserializer - breaks java.util.LinkedHashMap cannot be cast to class com.example.package$AuditLogEntry" in {
@@ -60,7 +107,6 @@ class AuditLogsConsumerTest extends TestBase {
     }
     TopicUtil.fetchAndProcessRecords(consumer, printAuthInfo)
   }
-
 
   val auditLogEntryErrorPrinter: circe.Error => Unit = (e: circe.Error) =>
     println(s"parsing failed: ${e}")

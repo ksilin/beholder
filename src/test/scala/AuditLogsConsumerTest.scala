@@ -20,6 +20,7 @@ class AuditLogsConsumerTest extends TestBase {
     TopicUtil.fetchAndProcessRecords(consumer)
   }
 
+  // currently fails on confluentRouting field
   "must read audit logs as string, parse to JSON and log" in {
 
     val consumer = new KafkaConsumer[String, String](commonConsumerProps)
@@ -82,6 +83,23 @@ class AuditLogsConsumerTest extends TestBase {
     println("count by api key / user:")
     println("---")
     authNCountByUser.sortBy(_._2._1).reverse foreach (e => println(e.asJson.spaces2))
+  }
+
+  "identify events working with API keys" in {
+    val props = commonConsumerProps.clone().asInstanceOf[Properties]
+    // props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
+    val consumer = new KafkaConsumer[String, String](props)
+    consumer.subscribe(List(auditLogTopic).asJava)
+
+    val records: Iterable[ConsumerRecord[String, String]] = TopicUtil.fetchAndProcessRecords(
+      consumer,
+      _ => (),
+      abortOnFirstRecord = false,
+      maxAttempts = 99
+    )
+
+    val entries: List[AuditLogEntry] =
+      records.map(r => decode[AuditLogEntry](r.value()).right.get).toList
   }
 
   "reads audit logs as JSON using KafkaJsonDeserializer - breaks java.util.LinkedHashMap cannot be cast to class com.example.package$AuditLogEntry" in {

@@ -108,6 +108,7 @@ object TopicUtil extends LogSupport with FutureConverter {
       process: ConsumerRecord[K, V] => Unit = { r: ConsumerRecord[K, V] =>
         info(s"${r.topic()} | ${r.partition()} | ${r.offset()}: ${r.key()} | ${r.value()}")
       },
+      filter: ConsumerRecord[K, V] => Boolean = { _: ConsumerRecord[K, V]  => true },
       abortOnFirstRecord: Boolean = true,
       maxAttempts: Int = 100,
       pause: Int = 100
@@ -124,7 +125,7 @@ object TopicUtil extends LogSupport with FutureConverter {
       found = !consumerRecords.isEmpty && abortOnFirstRecord
       if (!consumerRecords.isEmpty) {
         info(s"fetched ${consumerRecords.count()} records on attempt $attempts")
-        records = consumerRecords.asScala
+        records = consumerRecords.asScala.filter(filter)
         allRecords ++= records
         records foreach { r => process(r) }
       }

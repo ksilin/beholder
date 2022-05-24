@@ -29,8 +29,8 @@ trait ConfigBase {
     "org.apache.kafka.common.serialization.StringDeserializer"
   )
 
-  // commonConsumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-  commonConsumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
+  commonConsumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+  //commonConsumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
   commonConsumerProps.put(
     CommonClientConfigs.SECURITY_PROTOCOL_CONFIG,
     "SASL_SSL"

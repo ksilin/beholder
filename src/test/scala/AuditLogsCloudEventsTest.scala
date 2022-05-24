@@ -22,6 +22,8 @@ class AuditLogsCloudEventsTest extends TestBase {
 
   val auditLogTopic = "confluent-audit-log-events"
 
+  val consumerGroup = s"${this.suiteName}_group"
+
   val cloudEventsJsonContentType = "application/cloudevents+json"
 
   // deserializing to CloudEvent used to fail bc of
@@ -31,12 +33,14 @@ class AuditLogsCloudEventsTest extends TestBase {
   "reads audit logs as CloudEvents" in {
 
     val props = commonConsumerProps.clone().asInstanceOf[Properties]
-
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, classOf[CloudEventDeserializer])
+    props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+    props.put(ConsumerConfig.GROUP_ID_CONFIG, consumerGroup)
 
     val consumer = new KafkaConsumer[String, CloudEvent](props)
     consumer.subscribe(List(auditLogTopic).asJava)
     TopicUtil.fetchAndProcessRecords(consumer)
+    consumer.close()
   }
 
   "try the inner impl" in {
@@ -46,7 +50,9 @@ class AuditLogsCloudEventsTest extends TestBase {
       val headers                   = rec.headers()
 
       val contentType: String = KafkaHeaders.getParsedKafkaHeader(headers, KafkaHeaders.CONTENT_TYPE)
-      contentType mustBe cloudEventsJsonContentType
+
+      // as can also contain the charset and other stuff
+      contentType must startWith(cloudEventsJsonContentType)
 
       val format: EventFormat = io.cloudevents.core.provider.EventFormatProvider.getInstance().resolveFormat(contentType);
 
@@ -63,11 +69,13 @@ class AuditLogsCloudEventsTest extends TestBase {
 
     val props = commonConsumerProps.clone().asInstanceOf[Properties]
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, Serdes.ByteArray().deserializer().getClass)
+    props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+    props.put(ConsumerConfig.GROUP_ID_CONFIG, consumerGroup)
 
     val consumer = new KafkaConsumer[String, Array[Byte]](props)
     consumer.subscribe(List(auditLogTopic).asJava)
     TopicUtil.fetchAndProcessRecords(consumer, convertAndPrint)
-
+    consumer.close()
   }
 
 

@@ -1,22 +1,47 @@
-import com.example.{ AuditLogEntry, TopicUtil }
+import com.example.{AuditLogEntry, TopicUtil}
 import io.circe
 import io.circe.syntax._
 import io.circe.generic.auto._
 import io.circe.parser._
-import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
+import org.apache.kafka.clients.admin.{AdminClient, Config, DescribeConfigsResult, DescribeTopicsResult, TopicDescription}
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer}
+import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.header.Header
 
+import java.util
 import java.util.Properties
+import scala.collection.mutable
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 class AuditLogsConsumerTest extends TestBase {
 
   val auditLogTopic              = "confluent-audit-log-events"
   val cloudEventsJsonContentType = "application/cloudevents+json"
+  val consumerGroup = this.suiteName
+
+  private val auditLogTopicList: util.List[String] = List(auditLogTopic).asJava
+
+  "read audit topic settings" in {
+    val admin = AdminClient.create(commonConsumerProps)
+    val desc: DescribeTopicsResult = admin.describeTopics(auditLogTopicList)
+    val res: mutable.Map[String, TopicDescription] = Await.result(desc.all().toScalaFuture, 10.seconds).asScala
+    println("audit topic desc:")
+    res foreach println
+
+    val configResource = new ConfigResource(ConfigResource.Type.TOPIC, auditLogTopic)
+
+    val getConfig: DescribeConfigsResult = admin.describeConfigs(List(configResource).asJava)
+    val res2: mutable.Map[ConfigResource, Config] = Await.result(getConfig.all().toScalaFuture, 10.seconds).asScala
+    println("audit topic config:")
+    res2 foreach println
+  }
+
 
   "reads audit logs as string" in {
     val consumer = new KafkaConsumer[String, String](commonConsumerProps)
-    consumer.subscribe(List(auditLogTopic).asJava)
+    consumer.subscribe(auditLogTopicList)
     TopicUtil.fetchAndProcessRecords(consumer)
   }
 
@@ -24,12 +49,12 @@ class AuditLogsConsumerTest extends TestBase {
   "must read audit logs as string, parse to JSON and log" in {
 
     val consumer = new KafkaConsumer[String, String](commonConsumerProps)
-    consumer.subscribe(List(auditLogTopic).asJava)
+    consumer.subscribe(auditLogTopicList)
 
     val convertAndPrint: ConsumerRecord[String, String] => Unit = { rec =>
       val contentTypeHeader: Header = rec.headers().lastHeader("content-type")
-      new String(contentTypeHeader.value()) mustBe cloudEventsJsonContentType
-
+      new String(contentTypeHeader.value()) must startWith(cloudEventsJsonContentType)
+      println(s"decoding: ${rec.value()}")
       val parsedEvent: Either[circe.Error, AuditLogEntry] = decode[AuditLogEntry](rec.value())
       parsedEvent.fold(auditLogEntryErrorLogger, auditLogEntryStructuredLogger)
     }
@@ -45,17 +70,23 @@ class AuditLogsConsumerTest extends TestBase {
     val props = commonConsumerProps.clone().asInstanceOf[Properties]
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
     val consumer = new KafkaConsumer[String, String](props)
-    consumer.subscribe(List(auditLogTopic).asJava)
+    consumer.subscribe(auditLogTopicList)
 
     val records: Iterable[ConsumerRecord[String, String]] = TopicUtil.fetchAndProcessRecords(
       consumer,
       _ => (),
-      abortOnFirstRecord = false,
+      abortOnFirstRecord = true,
       maxAttempts = 99
     )
 
     val entries: List[AuditLogEntry] =
-      records.map(r => decode[AuditLogEntry](r.value()).right.get).toList
+      records.map(r => {
+        val str = r.value()
+        println(s"raw string: ${str}")
+        val decoded = decode[AuditLogEntry](str)
+        println(s"decoded: ${decoded}")
+        decoded.right.get
+      }).toList
 
     val simpleEntries: List[(String, String, String, String)] = entries.map { e =>
       val apiKeyOrUser = e.data.authenticationInfo.metadata
@@ -89,7 +120,7 @@ class AuditLogsConsumerTest extends TestBase {
     val props = commonConsumerProps.clone().asInstanceOf[Properties]
     // props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
     val consumer = new KafkaConsumer[String, String](props)
-    consumer.subscribe(List(auditLogTopic).asJava)
+    consumer.subscribe(auditLogTopicList)
 
     val records: Iterable[ConsumerRecord[String, String]] = TopicUtil.fetchAndProcessRecords(
       consumer,
@@ -115,7 +146,7 @@ class AuditLogsConsumerTest extends TestBase {
 
     val consumer = new KafkaConsumer[String, AuditLogEntry](jsonConfig)
 
-    consumer.subscribe(List(auditLogTopic).asJava)
+    consumer.subscribe(auditLogTopicList)
 
     val printAuthInfo: ConsumerRecord[String, AuditLogEntry] => Unit = { r =>
       val logEvent = r.value()

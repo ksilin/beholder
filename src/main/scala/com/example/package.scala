@@ -10,8 +10,16 @@ package object example {
       resourceType: String,
       resourceName: String,
       patternType: String,
-      superUserAuthorization: Boolean
+      superUserAuthorization: Option[Boolean],
+      rbacAuthorization: Option[RbacAuthorization]
   )
+
+  case class RbacAuthorization(
+      role: String,
+      scope: Scope
+  )
+
+  case class Scope(outerScope: Array[String])
 
   case class Data(
       serviceName: String,
@@ -26,11 +34,11 @@ package object example {
 
   case class Metadata(mechanism: String, identifier: String)
 
-  case class Request(correlation_id: String, client_id: String)
+  case class Request(correlation_id: String, client_id: Option[String])
 
-  case class RequestMetadata(client_address: String)
+  case class RequestMetadata(client_address: Option[String])
 
-  case class Result(status: String, message: String)
+  case class Result(status: String, message: Option[String])
 
   case class ConfluentRouting(route: String)
 
@@ -43,7 +51,10 @@ package object example {
       datacontenttype: String,
       subject: String,
       time: String,
-      confluentRouting: ConfluentRouting
+      serviceName: Option[String],
+      methodName: Option[String],
+      resourceName: Option[String]
+     // confluentRouting: ConfluentRouting
   )
 
 }
